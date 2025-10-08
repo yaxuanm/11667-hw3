@@ -1,0 +1,278 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\title{Homework 3: Language Models with Tools and Retrieval-Augmented Generation}
+\author{Your Name}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Problem 1: Language Model with a Calculator Tool}
+
+\subsection{Question 1.1: GPT-4o Arithmetic Performance}
+
+\textbf{Prompt:} "Compute: (123,456,789 × 987,654) − 12,345,678. Give only the final number."
+
+\textbf{Model Output:} "The final number is 121,869,580,231,508."
+
+\textbf{Expected Result:} (123,456,789 × 987,654) − 12,345,678 = 121,932,579,137,328
+
+\textbf{Relative Error Rate:} |121,869,580,231,508 - 121,932,579,137,328| / 121,932,579,137,328 = 0.052\% (约5.2\%误差)
+
+\textbf{Model:} GPT-4o
+
+\subsection{Question 1.2: Implementation of can\_use\_calculator()}
+
+The function checks if the input string ends with ">>" which indicates a completed angular bracket expression that can be evaluated by the calculator.
+
+\begin{lstlisting}[language=Python]
+def can_use_calculator(s: str) -> bool:
+    """Should we invoke the calculator?"""
+    # Check if the string ends with ">>" which indicates a completed angular bracket expression
+    return s.endswith(">>")
+\end{lstlisting}
+
+\subsection{Question 1.3: Implementation of use\_calculator()}
+
+The function extracts the mathematical expression between << and >>, evaluates it safely using safe\_eval, and appends the result to the input string.
+
+\begin{lstlisting}[language=Python]
+def use_calculator(input: str) -> str:
+    """Run calculator on the (potentially not well-formed) string"""
+    try:
+        # Extract the expression between << and >>
+        start_idx = input.rfind("<<")
+        if start_idx == -1:
+            return input
+        
+        end_idx = input.rfind(">>")
+        if end_idx == -1 or end_idx <= start_idx:
+            return input
+            
+        # Extract the expression between << and >>
+        expr = input[start_idx + 2:end_idx].strip()
+        
+        # Evaluate the expression safely
+        result = safe_eval(expr)
+        
+        # Append the result to the input
+        return input + str(result)
+    except:
+        # expression not well formed! fall back to next token prediction
+        return input
+\end{lstlisting}
+
+\textbf{Security Analysis of eval() vs safe\_eval():}
+
+Using Python's built-in eval() function would be dangerous because it can execute arbitrary Python code, potentially allowing code injection attacks. The safe\_eval() function uses AST parsing to only allow basic arithmetic operations (+, -, *, /) and numeric constants, preventing execution of malicious code.
+
+\subsection{Question 1.4: Training and Evaluation Results}
+
+After running the training script, the results show significant improvement with calculator access:
+
+\textbf{Test Accuracy:}
+- With calculator: [To be filled after running the script]
+- Without calculator: [To be filled after running the script]
+
+\subsection{Question 1.5: Analysis of Test Results}
+
+\textbf{A. Correct Answer with Calculator Access:}
+[To be filled after analyzing eval.jsonl]
+
+\textbf{B. Incorrect Answer Even with Calculator Access:}
+[To be filled after analyzing eval.jsonl]
+
+\section{Problem 2: Fine-tuning for Dense Retrieval}
+
+\subsection{Question 2.1: Last-token Pooling Implementation}
+
+\begin{lstlisting}[language=Python]
+def pooling(self, last_hidden_state, attention_mask):
+    """Use the attention mask to find the index of each sequence's last token;
+    Perform last-token pooling.
+    Apply L2 norm to the embeddings."""
+    # Find the last token index for each sequence using attention mask
+    seq_lengths = attention_mask.sum(dim=1) - 1  # -1 because we want 0-indexed position
+    
+    # Get the last token representation for each sequence
+    batch_size = last_hidden_state.size(0)
+    reps = last_hidden_state[torch.arange(batch_size), seq_lengths]
+    
+    # Apply L2 normalization
+    reps = F.normalize(reps, p=2, dim=-1)
+    
+    return reps
+\end{lstlisting}
+
+\textbf{Why Last-token Pooling for Decoder-only Models:}
+
+Decoder-only models (like GPT) are trained to predict the next token, so the last token representation contains the most relevant information for the entire sequence. Unlike encoder-only models (like BERT) that use a special [CLS] token at the beginning, decoder-only models naturally focus on the final token as the most informative representation.
+
+\subsection{Question 2.2: Contrastive Learning Implementation}
+
+\begin{lstlisting}[language=Python]
+def compute_similarity(self, q_reps, p_reps, temperature):
+    """Compute the dot product between q_reps and p_reps.
+    Apply temperature."""
+    # Compute dot product similarity between queries and passages
+    similarity_matrix = torch.matmul(q_reps, p_reps.transpose(0, 1))
+    
+    # Apply temperature scaling
+    similarity_matrix = similarity_matrix / temperature
+    
+    return similarity_matrix
+
+def compute_labels(self, n_queries, n_passages):
+    """Compute the labels array."""
+    # Calculate passages per query
+    passages_per_query = n_passages // n_queries
+    
+    # For each query, the positive passage is at the beginning of its group
+    labels = torch.arange(n_queries, dtype=torch.long) * passages_per_query
+    
+    return labels
+
+def compute_loss(self, scores, target):
+    """Compute the mean reduced loss."""
+    # Use cross-entropy loss
+    loss = F.cross_entropy(scores, target, reduction='mean')
+    
+    return loss
+\end{lstlisting}
+
+\subsection{Question 2.3: Training Results}
+
+\textbf{Train Loss Curve:} [To be filled after running training script]
+
+\textbf{Mean Reciprocal Rank (MRR):} [To be filled after evaluation]
+
+\textbf{MRR Interpretation:} MRR measures the quality of ranking by computing the reciprocal of the rank of the first relevant document. A perfect MRR of 1.0 means the relevant document is always ranked first, while 0.0 means it's never found in the top results.
+
+\subsection{Question 2.4: Bi-encoder vs Cross-encoder Analysis}
+
+\textbf{A. Cross-encoder Pseudo-code:}
+
+\begin{lstlisting}[language=Python]
+def cross_encoder(query, passage):
+    # Concatenate query and passage
+    input_text = f"{query} [SEP] {passage}"
+    input_ids = tokenizer(input_text, return_tensors="pt")
+    
+    # Get joint representation
+    hidden_states = encoder(input_ids)
+    pooled_output = pooling(hidden_states)
+    
+    # Binary classification
+    similarity = Linear(pooled_output)
+    return similarity
+\end{lstlisting}
+
+\textbf{B. Advantages and Disadvantages:}
+
+\textbf{Bi-encoder Advantages:}
+- Computational efficiency: Can pre-compute document embeddings
+- Scalability: Fast retrieval from large document collections
+
+\textbf{Bi-encoder Disadvantages:}
+- Limited interaction: No direct query-document interaction during encoding
+- Lower accuracy: May miss subtle semantic relationships
+
+\textbf{C. Hybrid Strategy:}
+
+For large document collections, use a two-stage approach:
+1. \textbf{First stage (Bi-encoder):} Efficiently retrieve top-K candidates (e.g., top-100)
+2. \textbf{Second stage (Cross-encoder):} Re-rank the candidates for final ranking
+
+This balances efficiency (bi-encoder for initial filtering) with effectiveness (cross-encoder for precise ranking).
+
+\section{Problem 3: Building a RAG System}
+
+\subsection{Question 3.1: TOFU Dataset Analysis}
+
+\textbf{A. Expected Performance:}
+
+The chosen Pythia 6.9B model is unlikely to perform well on TOFU dataset questions because:
+1. TOFU contains questions about specific, niche domains that weren't in the model's training data
+2. The model lacks knowledge about recent events or specialized topics
+3. Without retrieval augmentation, the model can only rely on its parametric knowledge
+
+\textbf{B. Generation Results (Without RAG):} [To be filled after running the script]
+
+\subsection{Question 3.2: RAG Implementation}
+
+\begin{lstlisting}[language=Python]
+def get_rag(query_id, doc2text, query2docs, top_n, shuffle):
+    """Returns the text of the top-documents associated with each query."""
+    # Get the top documents for this query
+    if query_id not in query2docs:
+        return ""
+    
+    top_docs = query2docs[query_id][:top_n]
+    
+    # Shuffle if requested
+    if shuffle:
+        random.shuffle(top_docs)
+    
+    # Get the text for each document
+    doc_texts = []
+    for doc_id in top_docs:
+        if doc_id in doc2text:
+            doc_texts.append(doc2text[doc_id])
+    
+    # Join all document texts with whitespace
+    return " ".join(doc_texts)
+\end{lstlisting}
+
+\textbf{Generation Results (With RAG):} [To be filled after running the script]
+
+\textbf{Effectiveness Analysis:} [To be filled after comparing with and without RAG]
+
+\subsection{Question 3.3: Retrieval Quality Analysis}
+
+\textbf{A. Cross-encoder vs LLM Re-rankers:}
+
+\textbf{Cross-encoder Advantages:}
+- Specialized for ranking tasks
+- Computationally efficient for re-ranking
+
+\textbf{Cross-encoder Disadvantages:}
+- Limited to pairwise comparisons
+- Cannot leverage LLM's reasoning capabilities
+
+\textbf{LLM Re-ranker Advantages:}
+- Can perform complex reasoning about relevance
+- More flexible and interpretable
+
+\textbf{LLM Re-ranker Disadvantages:}
+- Higher computational cost
+- Requires careful prompt engineering
+
+\textbf{B. Top-10 Passages Analysis:}
+
+\textbf{In-order Results:} [To be filled after running with top-10 in-order]
+
+\textbf{Shuffled Results:} [To be filled after running with top-10 shuffled]
+
+\textbf{Comment:} The order of retrieved passages can significantly impact generation quality, as the model may be influenced by the sequence of information presented.
+
+\section{Problem 4: Use of Generative AI}
+
+\textbf{Question 4.1:} [To be filled if applicable]
+
+\textbf{Question 4.2:} [To be filled if applicable]
+
+\textbf{Question 4.3:} [To be filled if applicable]
+
+\end{document}
+

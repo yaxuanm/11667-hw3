@@ -1,0 +1,32 @@
+{
+    "tests": [
+        {
+            "score": 1,
+            "max_score": 1,
+            "name": "test_pooling",
+            "output": "",
+            "visibility": "visible"
+        },
+        {
+            "score": 1,
+            "max_score": 1,
+            "name": "test_compute_similarity",
+            "output": "",
+            "visibility": "visible"
+        },
+        {
+            "score": 1,
+            "max_score": 1,
+            "name": "test_compute_labels",
+            "output": "",
+            "visibility": "visible"
+        },
+        {
+            "score": 1,
+            "max_score": 1,
+            "name": "test_compute_loss",
+            "output": "",
+            "visibility": "visible"
+        }
+    ]
+}
