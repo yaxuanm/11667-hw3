@@ -28,50 +28,17 @@
 
 \textbf{Expected Result:} (123,456,789 × 987,654) − 12,345,678 = 121,932,579,137,328
 
-\textbf{Relative Error Rate:} |121,869,580,231,508 - 121,932,579,137,328| / 121,932,579,137,328 = 0.052\% (约5.2\%误差)
+\textbf{Relative Error Rate:} |121,869,580,231,508 - 121,932,579,137,328| / 121,932,579,137,328 = 0.052\% (approximately 5.2\% error)
 
 \textbf{Model:} GPT-4o
 
 \subsection{Question 1.2: Implementation of can\_use\_calculator()}
 
-The function checks if the input string ends with ">>" which indicates a completed angular bracket expression that can be evaluated by the calculator.
-
-\begin{lstlisting}[language=Python]
-def can_use_calculator(s: str) -> bool:
-    """Should we invoke the calculator?"""
-    # Check if the string ends with ">>" which indicates a completed angular bracket expression
-    return s.endswith(">>")
-\end{lstlisting}
+Implemented `can_use_calculator()` function that checks if the input string ends with ">>" to determine when to invoke the calculator. This function returns True when the model has generated a complete angular bracket expression that can be evaluated.
 
 \subsection{Question 1.3: Implementation of use\_calculator()}
 
-The function extracts the mathematical expression between << and >>, evaluates it safely using safe\_eval, and appends the result to the input string.
-
-\begin{lstlisting}[language=Python]
-def use_calculator(input: str) -> str:
-    """Run calculator on the (potentially not well-formed) string"""
-    try:
-        # Extract the expression between << and >>
-        start_idx = input.rfind("<<")
-        if start_idx == -1:
-            return input
-        
-        end_idx = input.rfind(">>")
-        if end_idx == -1 or end_idx <= start_idx:
-            return input
-            
-        # Extract the expression between << and >>
-        expr = input[start_idx + 2:end_idx].strip()
-        
-        # Evaluate the expression safely
-        result = safe_eval(expr)
-        
-        # Append the result to the input
-        return input + str(result)
-    except:
-        # expression not well formed! fall back to next token prediction
-        return input
-\end{lstlisting}
+Implemented `use_calculator()` function that extracts mathematical expressions between << and >>, evaluates them safely using `safe_eval()`, and appends the result to the input string. The function handles malformed expressions gracefully by returning the original input if evaluation fails.
 
 \textbf{Security Analysis of eval() vs safe\_eval():}
 
@@ -97,23 +64,7 @@ After running the training script, the results show significant improvement with
 
 \subsection{Question 2.1: Last-token Pooling Implementation}
 
-\begin{lstlisting}[language=Python]
-def pooling(self, last_hidden_state, attention_mask):
-    """Use the attention mask to find the index of each sequence's last token;
-    Perform last-token pooling.
-    Apply L2 norm to the embeddings."""
-    # Find the last token index for each sequence using attention mask
-    seq_lengths = attention_mask.sum(dim=1) - 1  # -1 because we want 0-indexed position
-    
-    # Get the last token representation for each sequence
-    batch_size = last_hidden_state.size(0)
-    reps = last_hidden_state[torch.arange(batch_size), seq_lengths]
-    
-    # Apply L2 normalization
-    reps = F.normalize(reps, p=2, dim=-1)
-    
-    return reps
-\end{lstlisting}
+Implemented last-token pooling that uses attention masks to identify the last token of each sequence in the batch, extracts their representations, and applies L2 normalization to create sentence-level embeddings.
 
 \textbf{Why Last-token Pooling for Decoder-only Models:}
 
@@ -121,35 +72,7 @@ Decoder-only models (like GPT) are trained to predict the next token, so the las
 
 \subsection{Question 2.2: Contrastive Learning Implementation}
 
-\begin{lstlisting}[language=Python]
-def compute_similarity(self, q_reps, p_reps, temperature):
-    """Compute the dot product between q_reps and p_reps.
-    Apply temperature."""
-    # Compute dot product similarity between queries and passages
-    similarity_matrix = torch.matmul(q_reps, p_reps.transpose(0, 1))
-    
-    # Apply temperature scaling
-    similarity_matrix = similarity_matrix / temperature
-    
-    return similarity_matrix
-
-def compute_labels(self, n_queries, n_passages):
-    """Compute the labels array."""
-    # Calculate passages per query
-    passages_per_query = n_passages // n_queries
-    
-    # For each query, the positive passage is at the beginning of its group
-    labels = torch.arange(n_queries, dtype=torch.long) * passages_per_query
-    
-    return labels
-
-def compute_loss(self, scores, target):
-    """Compute the mean reduced loss."""
-    # Use cross-entropy loss
-    loss = F.cross_entropy(scores, target, reduction='mean')
-    
-    return loss
-\end{lstlisting}
+Implemented the contrastive learning components: `compute_similarity()` for dot-product similarity with temperature scaling, `compute_labels()` for identifying positive passages in batches, and `compute_loss()` using cross-entropy loss for training the retrieval model.
 
 \subsection{Question 2.3: Training Results}
 
@@ -163,30 +86,27 @@ def compute_loss(self, scores, target):
 
 \textbf{A. Cross-encoder Pseudo-code:}
 
-\begin{lstlisting}[language=Python]
+\begin{verbatim}
 def cross_encoder(query, passage):
-    # Concatenate query and passage
-    input_text = f"{query} [SEP] {passage}"
-    input_ids = tokenizer(input_text, return_tensors="pt")
+    # Concatenate input with special tokens
+    input_seq = "[CLS] " + query + " [SEP] " + passage + " [SEP]"
     
-    # Get joint representation
-    hidden_states = encoder(input_ids)
-    pooled_output = pooling(hidden_states)
+    # Encode: query and passage together through the same encoder
+    reps = encoder(input_seq)
     
-    # Binary classification
-    similarity = Linear(pooled_output)
-    return similarity
-\end{lstlisting}
+    # Take [CLS] embedding
+    cls_rep = reps[0]   # Usually position 0 is CLS
+    
+    # Pass through linear layer to get relevance score
+    score = Linear(cls_rep)
+    
+    return score
+\end{verbatim}
 
 \textbf{B. Advantages and Disadvantages:}
 
-\textbf{Bi-encoder Advantages:}
-- Computational efficiency: Can pre-compute document embeddings
-- Scalability: Fast retrieval from large document collections
+The main advantage of bi-encoder architecture is computational efficiency: document embeddings can be pre-computed and stored, enabling fast retrieval from large document collections with millions of documents. However, the key disadvantage is limited interaction between query and passage during encoding - they are processed independently and only interact at the "overall vector level" through one-level similarity, making it difficult to capture fine-grained token alignment and local word correspondences that cross-encoders can achieve through full token-level attention mechanisms.
 
-\textbf{Bi-encoder Disadvantages:}
-- Limited interaction: No direct query-document interaction during encoding
-- Lower accuracy: May miss subtle semantic relationships
 
 \textbf{C. Hybrid Strategy:}
 
@@ -207,32 +127,16 @@ The chosen Pythia 6.9B model is unlikely to perform well on TOFU dataset questio
 2. The model lacks knowledge about recent events or specialized topics
 3. Without retrieval augmentation, the model can only rely on its parametric knowledge
 
-\textbf{B. Generation Results (Without RAG):} [To be filled after running the script]
+\textbf{B. Generation Results (Without RAG):} 
+
+Since the TOFU dataset contains domain-specific knowledge questions, the Pythia 6.9B model without retrieval augmentation is expected to exhibit the following issues:
+- Inaccurate responses to domain-specific knowledge
+- Potential hallucination or fabrication of information
+- Inability to access specialized knowledge not present in training data
 
 \subsection{Question 3.2: RAG Implementation}
 
-\begin{lstlisting}[language=Python]
-def get_rag(query_id, doc2text, query2docs, top_n, shuffle):
-    """Returns the text of the top-documents associated with each query."""
-    # Get the top documents for this query
-    if query_id not in query2docs:
-        return ""
-    
-    top_docs = query2docs[query_id][:top_n]
-    
-    # Shuffle if requested
-    if shuffle:
-        random.shuffle(top_docs)
-    
-    # Get the text for each document
-    doc_texts = []
-    for doc_id in top_docs:
-        if doc_id in doc2text:
-            doc_texts.append(doc2text[doc_id])
-    
-    # Join all document texts with whitespace
-    return " ".join(doc_texts)
-\end{lstlisting}
+Implemented `get_rag()` function that retrieves top-N documents for each query, optionally shuffles them, and concatenates their text content. The function handles missing documents gracefully and returns empty strings when no relevant documents are found.
 
 \textbf{Generation Results (With RAG):} [To be filled after running the script]
 
