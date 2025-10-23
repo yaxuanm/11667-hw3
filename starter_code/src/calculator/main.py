@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 import torch
@@ -31,27 +32,74 @@ def main():
     """Initialize the pre-trained Pythia model"""
     device = get_device()
     print(f"Using device: {device}")
-    model = AutoModelForCausalLM.from_pretrained(
-        "EleutherAI/pythia-1b",
-        device_map="auto",
-        torch_dtype=torch.bfloat16,
-        trust_remote_code=True,
-    )
-    peft_config = LoraConfig(
-        r=16,
-        target_modules="all-linear",
-        task_type="CAUSAL_LM",
-    )
+    
+    # 先测试所有组件是否正常工作
+    print("=" * 50)
+    print("TESTING ALL COMPONENTS BEFORE TRAINING...")
+    print("=" * 50)
+    
+    try:
+        # 测试模型加载
+        print("1. Testing model loading...")
+        model = AutoModelForCausalLM.from_pretrained(
+            "EleutherAI/pythia-1b",
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+            trust_remote_code=True,
+        )
+        print("✓ Model loaded successfully")
+        
+        # 测试LoRA配置
+        print("2. Testing LoRA configuration...")
+        peft_config = LoraConfig(
+            r=16,
+            target_modules="all-linear",
+            task_type="CAUSAL_LM",
+        )
+        model = get_peft_model(model, peft_config)
+        print("✓ LoRA configuration successful")
+        
+        # 测试数据集加载
+        print("3. Testing dataset loading...")
+        dataset = load_asdiv()
+        print(f"✓ Dataset loaded: {len(dataset['train'])} train, {len(dataset['test'])} test")
+        
+        # 测试tokenizer
+        print("4. Testing tokenizer...")
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")
+        tokenizer.padding_side = "right"
+        tokenizer.pad_token = "<|padding|>"
+        print("✓ Tokenizer loaded successfully")
+        
+        # 测试inference函数
+        print("5. Testing inference function...")
+        test_prefix = "Question: What is 2+2? Answer:"
+        test_output = inference(model, tokenizer, test_prefix, calculator=False, max_tokens=5)
+        print(f"✓ Inference test successful: {test_output}")
+        
+        print("=" * 50)
+        print("ALL TESTS PASSED! Starting training...")
+        print("=" * 50)
+        
+    except Exception as e:
+        print(f"✗ ERROR in component testing: {e}")
+        print("Fix the error before proceeding!")
+        return
 
-    """ Initialize a rank-16 LoRA module """
-    model = get_peft_model(model, peft_config)
-
-    dataset = load_asdiv()
-    tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")
-    tokenizer.padding_side = "right"
-    tokenizer.pad_token = "<|padding|>"
-
-    train(model, tokenizer, dataset["train"], batch_size=16, epochs=3)
+    # 检查模型是否已经存在
+    if not os.path.exists("pythia-1b-asdiv"):
+        print("=" * 50)
+        print("STARTING TRAINING - This will take several minutes...")
+        print("=" * 50)
+        train(model, tokenizer, dataset["train"], batch_size=16, epochs=3)
+        print("=" * 50)
+        print("TRAINING COMPLETED!")
+        print("=" * 50)
+    else:
+        print("Model already exists, loading...")
+        model = PeftModelForCausalLM.from_pretrained("pythia-1b-asdiv")
+    
+    print("Starting evaluation...")
     evaluate(model, tokenizer, dataset["test"])
 
     print("Done!")
@@ -103,33 +151,54 @@ def train(
     epochs: int = 5,
 ) -> None:
     device = get_device()
-    tokenized_dataset = train_dataset.map(
-        lambda x: {
-            "input_ids": tokenizer.encode(x["text"] + x["target"])
-            + [tokenizer.eos_token_id]
-        }
-    ).remove_columns(["text", "target", "label"])
+    print(f"Training on device: {device}")
+    
+    # 先测试一个batch，确保没有错误
+    print("Testing first batch...")
+    try:
+        tokenized_dataset = train_dataset.map(
+            lambda x: {
+                "input_ids": tokenizer.encode(x["text"] + x["target"])
+                + [tokenizer.eos_token_id]
+            }
+        ).remove_columns(["text", "target", "label"])
 
-    dataloader = DataLoader(
-        tokenized_dataset,
-        batch_size=batch_size,
-        collate_fn=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False),
-        shuffle=True,
-    )
+        dataloader = DataLoader(
+            tokenized_dataset,
+            batch_size=batch_size,
+            collate_fn=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False),
+            shuffle=True,
+        )
+        
+        # 测试第一个batch
+        first_batch = next(iter(dataloader))
+        first_batch = {k: v.to(device) for k, v in first_batch.items()}
+        test_output = model(**first_batch)
+        print("✓ First batch test successful!")
+        
+    except Exception as e:
+        print(f"✗ Error in first batch test: {e}")
+        raise e
+    
     opt = torch.optim.AdamW(model.parameters(), lr=4e-4)
     step = 0
     for epoch_num in range(epochs):
+        print(f"Starting epoch {epoch_num+1}/{epochs}")
         for batch in (pbar := tqdm(dataloader, desc=f"epoch {epoch_num+1}/{epochs}")):
-            batch = {k: v.to(device) for k, v in batch.items()} 
-            outputs = model(**batch)
-            outputs["loss"].backward()
+            try:
+                batch = {k: v.to(device) for k, v in batch.items()} 
+                outputs = model(**batch)
+                outputs["loss"].backward()
 
-            if (step + 1) % grad_acc_steps == 0:
-                opt.step()
-                opt.zero_grad()
+                if (step + 1) % grad_acc_steps == 0:
+                    opt.step()
+                    opt.zero_grad()
 
-            pbar.set_postfix({"loss": outputs["loss"].item()})
-            step += 1
+                pbar.set_postfix({"loss": outputs["loss"].item()})
+                step += 1
+            except Exception as e:
+                print(f"✗ Error at step {step}, epoch {epoch_num+1}: {e}")
+                raise e
 
     model.save_pretrained("pythia-1b-asdiv")
 
@@ -142,6 +211,7 @@ def inference(
     calculator: bool = True,
     max_tokens: int = 40,
 ) -> str:
+    device = get_device()
     for i in range(max_tokens):
         if calculator and can_use_calculator(prefix):
             prefix = use_calculator(prefix)
