@@ -206,28 +206,38 @@ The Pythia 6.9B model with retrieval augmentation shows significant improvement:
 \textbf{A. Cross-encoder vs LLM Re-rankers:}
 
 \textbf{Cross-encoder Advantages:}
-- Specialized for ranking tasks
-- Computationally efficient for re-ranking
+- Specialized for ranking tasks with joint query-document encoding
+- Computationally efficient for re-ranking small sets of documents
+- Can capture complex semantic relationships between queries and documents
+- Generally more precise than bi-encoders for ranking
 
 \textbf{Cross-encoder Disadvantages:}
-- Limited to pairwise comparisons
-- Cannot leverage LLM's reasoning capabilities
+- Limited to pairwise comparisons, cannot handle listwise ranking directly
+- Cannot leverage LLM's advanced reasoning and generation capabilities
+- Requires separate training for ranking tasks
+- Less flexible for complex ranking criteria
 
 \textbf{LLM Re-ranker Advantages:}
-- Can perform complex reasoning about relevance
-- More flexible and interpretable
+- Can perform complex reasoning about relevance using natural language
+- More flexible and interpretable ranking decisions
+- Can incorporate additional context and domain knowledge
+- Can handle complex ranking criteria through prompting
 
 \textbf{LLM Re-ranker Disadvantages:}
-- Higher computational cost
-- Requires careful prompt engineering
+- Significantly higher computational cost and latency
+- Requires careful prompt engineering and may be inconsistent
+- Difficult to scale for real-time applications
+- May generate non-deterministic ranking results
 
 \textbf{B. Top-10 Passages Analysis:}
 
-\textbf{In-order Results:} When passages are presented in order of relevance (top-10 in-order), the model can access the most relevant information first, leading to more accurate and focused responses. The retrieved documents provide structured, hierarchical information that guides the model's generation.
+\textbf{In-order Results:} When passages are presented in order of relevance (top-10 in-order), the model's responses were surprisingly brief and often incomplete. For example, for the question about Anara Yusifova's awards, the in-order response was simply "Russian Women's League" compared to the detailed top-1 response listing multiple specific awards. This suggests that with more documents, the model may struggle to synthesize information effectively.
 
-\textbf{Shuffled Results:} When passages are shuffled, the model may be confused by conflicting or less relevant information appearing early in the context. This can lead to less coherent responses as the model struggles to prioritize information from the mixed order of retrieved documents.
+\textbf{Shuffled Results:} When passages are shuffled, the responses show mixed quality. Some responses were more detailed (like the Albert Sidney Lane question), while others were incomplete (like "It is unknown" for Nakamura's book). The shuffled order sometimes provided different perspectives but also introduced inconsistency in response quality.
 
-\textbf{Comment:} The order of retrieved passages significantly impacts generation quality. In-order presentation allows the model to focus on the most relevant information first, while shuffled presentation can introduce noise and reduce response quality. This demonstrates the importance of proper ranking in retrieval-augmented generation systems.
+\textbf{Comparison with Top-1:} Interestingly, the top-1 RAG approach often provided the most comprehensive and accurate responses. For example, the top-1 response for Anara Yusifova listed multiple specific awards with full details, while both top-10 approaches provided much shorter or less accurate information.
+
+\textbf{Comment:} Contrary to expectations, increasing the number of retrieved passages from 1 to 10 did not consistently improve response quality. The top-1 approach often outperformed both top-10 variants, suggesting that retrieval quality (finding the most relevant single document) may be more important than retrieval quantity. The order of passages had mixed effects, with shuffled order sometimes providing different but not necessarily better information.
 
 \section{Problem 4: Use of Generative AI}
 
