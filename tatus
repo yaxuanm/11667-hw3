@@ -1,0 +1,170 @@
+warning: in the working copy of 'starter_code/src/calculator/main.py', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/starter_code/src/calculator/main.py b/starter_code/src/calculator/main.py[m
+[1mindex 61f46a2..8d064a8 100644[m
+[1m--- a/starter_code/src/calculator/main.py[m
+[1m+++ b/starter_code/src/calculator/main.py[m
+[36m@@ -1,3 +1,4 @@[m
+[32m+[m[32mimport os[m
+ import pandas as pd[m
+ import numpy as np[m
+ import torch[m
+[36m@@ -31,27 +32,74 @@[m [mdef main():[m
+     """Initialize the pre-trained Pythia model"""[m
+     device = get_device()[m
+     print(f"Using device: {device}")[m
+[31m-    model = AutoModelForCausalLM.from_pretrained([m
+[31m-        "EleutherAI/pythia-1b",[m
+[31m-        device_map="auto",[m
+[31m-        torch_dtype=torch.bfloat16,[m
+[31m-        trust_remote_code=True,[m
+[31m-    )[m
+[31m-    peft_config = LoraConfig([m
+[31m-        r=16,[m
+[31m-        target_modules="all-linear",[m
+[31m-        task_type="CAUSAL_LM",[m
+[31m-    )[m
+[31m-[m
+[31m-    """ Initialize a rank-16 LoRA module """[m
+[31m-    model = get_peft_model(model, peft_config)[m
+[31m-[m
+[31m-    dataset = load_asdiv()[m
+[31m-    tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")[m
+[31m-    tokenizer.padding_side = "right"[m
+[31m-    tokenizer.pad_token = "<|padding|>"[m
+[31m-[m
+[31m-    train(model, tokenizer, dataset["train"], batch_size=16, epochs=3)[m
+[32m+[m[41m    [m
+[32m+[m[32m    # 先测试所有组件是否正常工作[m
+[32m+[m[32m    print("=" * 50)[m
+[32m+[m[32m    print("TESTING ALL COMPONENTS BEFORE TRAINING...")[m
+[32m+[m[32m    print("=" * 50)[m
+[32m+[m[41m    [m
+[32m+[m[32m    try:[m
+[32m+[m[32m        # 测试模型加载[m
+[32m+[m[32m        print("1. Testing model loading...")[m
+[32m+[m[32m        model = AutoModelForCausalLM.from_pretrained([m
+[32m+[m[32m            "EleutherAI/pythia-1b",[m
+[32m+[m[32m            device_map="auto",[m
+[32m+[m[32m            torch_dtype=torch.bfloat16,[m
+[32m+[m[32m            trust_remote_code=True,[m
+[32m+[m[32m        )[m
+[32m+[m[32m        print("✓ Model loaded successfully")[m
+[32m+[m[41m        [m
+[32m+[m[32m        # 测试LoRA配置[m
+[32m+[m[32m        print("2. Testing LoRA configuration...")[m
+[32m+[m[32m        peft_config = LoraConfig([m
+[32m+[m[32m            r=16,[m
+[32m+[m[32m            target_modules="all-linear",[m
+[32m+[m[32m            task_type="CAUSAL_LM",[m
+[32m+[m[32m        )[m
+[32m+[m[32m        model = get_peft_model(model, peft_config)[m
+[32m+[m[32m        print("✓ LoRA configuration successful")[m
+[32m+[m[41m        [m
+[32m+[m[32m        # 测试数据集加载[m
+[32m+[m[32m        print("3. Testing dataset loading...")[m
+[32m+[m[32m        dataset = load_asdiv()[m
+[32m+[m[32m        print(f"✓ Dataset loaded: {len(dataset['train'])} train, {len(dataset['test'])} test")[m
+[32m+[m[41m        [m
+[32m+[m[32m        # 测试tokenizer[m
+[32m+[m[32m        print("4. Testing tokenizer...")[m
+[32m+[m[32m        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-70m")[m
+[32m+[m[32m        tokenizer.padding_side = "right"[m
+[32m+[m[32m        tokenizer.pad_token = "<|padding|>"[m
+[32m+[m[32m        print("✓ Tokenizer loaded successfully")[m
+[32m+[m[41m        [m
+[32m+[m[32m        # 测试inference函数[m
+[32m+[m[32m        print("5. Testing inference function...")[m
+[32m+[m[32m        test_prefix = "Question: What is 2+2? Answer:"[m
+[32m+[m[32m        test_output = inference(model, tokenizer, test_prefix, calculator=False, max_tokens=5)[m
+[32m+[m[32m        print(f"✓ Inference test successful: {test_output}")[m
+[32m+[m[41m        [m
+[32m+[m[32m        print("=" * 50)[m
+[32m+[m[32m        print("ALL TESTS PASSED! Starting training...")[m
+[32m+[m[32m        print("=" * 50)[m
+[32m+[m[41m        [m
+[32m+[m[32m    except Exception as e:[m
+[32m+[m[32m        print(f"✗ ERROR in component testing: {e}")[m
+[32m+[m[32m        print("Fix the error before proceeding!")[m
+[32m+[m[32m        return[m
+[32m+[m
+[32m+[m[32m    # 检查模型是否已经存在[m
+[32m+[m[32m    if not os.path.exists("pythia-1b-asdiv"):[m
+[32m+[m[32m        print("=" * 50)[m
+[32m+[m[32m        print("STARTING TRAINING - This will take several minutes...")[m
+[32m+[m[32m        print("=" * 50)[m
+[32m+[m[32m        train(model, tokenizer, dataset["train"], batch_size=16, epochs=3)[m
+[32m+[m[32m        print("=" * 50)[m
+[32m+[m[32m        print("TRAINING COMPLETED!")[m
+[32m+[m[32m        print("=" * 50)[m
+[32m+[m[32m    else:[m
+[32m+[m[32m        print("Model already exists, loading...")[m
+[32m+[m[32m        model = PeftModelForCausalLM.from_pretrained("pythia-1b-asdiv")[m
+[32m+[m[41m    [m
+[32m+[m[32m    print("Starting evaluation...")[m
+     evaluate(model, tokenizer, dataset["test"])[m
+ [m
+     print("Done!")[m
+[36m@@ -103,33 +151,54 @@[m [mdef train([m
+     epochs: int = 5,[m
+ ) -> None:[m
+     device = get_device()[m
+[31m-    tokenized_dataset = train_dataset.map([m
+[31m-        lambda x: {[m
+[31m-            "input_ids": tokenizer.encode(x["text"] + x["target"])[m
+[31m-            + [tokenizer.eos_token_id][m
+[31m-        }[m
+[31m-    ).remove_columns(["text", "target", "label"])[m
+[31m-[m
+[31m-    dataloader = DataLoader([m
+[31m-        tokenized_dataset,[m
+[31m-        batch_size=batch_size,[m
+[31m-        collate_fn=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False),[m
+[31m-        shuffle=True,[m
+[31m-    )[m
+[32m+[m[32m    print(f"Training on device: {device}")[m
+[32m+[m[41m    [m
+[32m+[m[32m    # 先测试一个batch，确保没有错误[m
+[32m+[m[32m    print("Testing first batch...")[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        tokenized_dataset = train_dataset.map([m
+[32m+[m[32m            lambda x: {[m
+[32m+[m[32m                "input_ids": tokenizer.encode(x["text"] + x["target"])[m
+[32m+[m[32m                + [tokenizer.eos_token_id][m
+[32m+[m[32m            }[m
+[32m+[m[32m        ).remove_columns(["text", "target", "label"])[m
+[32m+[m
+[32m+[m[32m        dataloader = DataLoader([m
+[32m+[m[32m            tokenized_dataset,[m
+[32m+[m[32m            batch_size=batch_size,[m
+[32m+[m[32m            collate_fn=transformers.DataCollatorForLanguageModeling(tokenizer, mlm=False),[m
+[32m+[m[32m            shuffle=True,[m
+[32m+[m[32m        )[m
+[32m+[m[41m        [m
+[32m+[m[32m        # 测试第一个batch[m
+[32m+[m[32m        first_batch = next(iter(dataloader))[m
+[32m+[m[32m        first_batch = {k: v.to(device) for k, v in first_batch.items()}[m
+[32m+[m[32m        test_output = model(**first_batch)[m
+[32m+[m[32m        print("✓ First batch test successful!")[m
+[32m+[m[41m        [m
+[32m+[m[32m    except Exception as e:[m
+[32m+[m[32m        print(f"✗ Error in first batch test: {e}")[m
+[32m+[m[32m        raise e[m
+[32m+[m[41m    [m
+     opt = torch.optim.AdamW(model.parameters(), lr=4e-4)[m
+     step = 0[m
+     for epoch_num in range(epochs):[m
+[32m+[m[32m        print(f"Starting epoch {epoch_num+1}/{epochs}")[m
+         for batch in (pbar := tqdm(dataloader, desc=f"epoch {epoch_num+1}/{epochs}")):[m
+[31m-            batch = {k: v.to(device) for k, v in batch.items()} [m
+[31m-            outputs = model(**batch)[m
+[31m-            outputs["loss"].backward()[m
+[32m+[m[32m            try:[m
+[32m+[m[32m                batch = {k: v.to(device) for k, v in batch.items()}[m[41m [m
+[32m+[m[32m                outputs = model(**batch)[m
+[32m+[m[32m                outputs["loss"].backward()[m
+ [m
+[31m-            if (step + 1) % grad_acc_steps == 0:[m
+[31m-                opt.step()[m
+[31m-                opt.zero_grad()[m
+[32m+[m[32m                if (step + 1) % grad_acc_steps == 0:[m
+[32m+[m[32m             
